@@ -9,7 +9,7 @@ We will also draw some introductory material from these two previous talks:
 * ["Intro to Data Science"](http://www.slideshare.net/pacoid/intro-to-data-science-for-enterprise-big-data)
 * ["Cascading for the Impatient"](http://www.slideshare.net/pacoid/cascading-for-the-impatient)
 
-For more details, please read the accompanying [wiki page](https://github.com/ceteri/CoPA/wiki/CMU-Workshop-on-Cascading---City-of-Palo-Alto-Open-Data).
+For more details, please read the accompanying [wiki page](https://github.com/ceteri/CoPA/wiki).
 
 
 Build Instructions
