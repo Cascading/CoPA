@@ -9,7 +9,7 @@ We will also draw some introductory material from these two previous talks:
 * ["Intro to Data Science"](http://www.slideshare.net/pacoid/intro-to-data-science-for-enterprise-big-data)
 * ["Cascading for the Impatient"](http://www.slideshare.net/pacoid/cascading-for-the-impatient)
 
-For more details, please read the accompanying [wiki page](https://github.com/ceteri/CoPA/wiki).
+For more details, please read the accompanying [wiki page](https://github.com/Cascading/CoPA/wiki).
 
 
 Build Instructions
@@ -25,14 +25,14 @@ To build the sample app from the command line use:
 Before running this sample app, be sure to set your `HADOOP_HOME` environment variable. Then clear the `output` directory, then to run on a desktop/laptop with Apache Hadoop in standalone mode:
 
     rm -rf output
-    hadoop jar ./build/libs/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv output/trap output/tsv output/tree output/road output/park
+    hadoop jar ./build/libs/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv output/trap output/tsv output/tree output/road output/park output/shade
 
 To view the results, for example the cleaned-up trees data:
 
     ls output
-    more output/tree/part-00000
+    more output/shade/part-00000
 
-An example of log captured from a successful build+run is at https://gist.github.com/3020297
+An example of log captured from a successful build+run is at https://gist.github.com/3660888
 
 About Cascading
 ===============

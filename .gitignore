@@ -1,9 +1,11 @@
 build/
 output/
 dot/
+.gradle/
 
 *~
 *.class
+.DS_Store
 
 # Package Files #
 *.jar
