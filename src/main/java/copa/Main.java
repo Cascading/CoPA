@@ -55,12 +55,14 @@ public class
     String gisPath = args[ 0 ];
     String metaTreePath = args[ 1 ];
     String metaRoadPath = args[ 2 ];
-    String trapPath = args[ 3 ];
-    String tsvPath = args[ 4 ];
-    String treePath = args[ 5 ];
-    String roadPath = args[ 6 ];
-    String parkPath = args[ 7 ];
-    String shadePath = args[ 8 ];
+    String logsPath = args[ 3 ];
+    String trapPath = args[ 4 ];
+    String tsvPath = args[ 5 ];
+    String treePath = args[ 6 ];
+    String roadPath = args[ 7 ];
+    String parkPath = args[ 8 ];
+    String shadePath = args[ 9 ];
+    String recoPath = args[ 10 ];
 
     Properties properties = new Properties();
     AppProps.setApplicationJarClass( properties, Main.class );
@@ -70,12 +72,14 @@ public class
     Tap gisTap = new Hfs( new TextLine( new Fields( "line" ) ), gisPath );
     Tap metaTreeTap = new Hfs( new TextDelimited( true, "\t" ), metaTreePath );
     Tap metaRoadTap = new Hfs( new TextDelimited( true, "\t" ), metaRoadPath );
+    Tap logsTap = new Hfs( new TextDelimited( true, "," ), logsPath );
     Tap trapTap = new Hfs( new TextDelimited( true, "\t" ), trapPath );
     Tap tsvTap = new Hfs( new TextDelimited( true, "\t" ), tsvPath );
     Tap treeTap = new Hfs( new TextDelimited( true, "\t" ), treePath );
     Tap roadTap = new Hfs( new TextDelimited( true, "\t" ), roadPath );
     Tap parkTap = new Hfs( new TextDelimited( true, "\t" ), parkPath );
     Tap shadeTap = new Hfs( new TextDelimited( true, "\t" ), shadePath );
+    Tap recoTap = new Hfs( new TextDelimited( true, "\t" ), recoPath );
 
     // specify a regex to split the GIS dump into known fields
     Fields fieldDeclaration = new Fields( "blurb", "misc", "geo", "kind" );
@@ -83,6 +87,8 @@ public class
     int[] gisGroups = { 1, 2, 3, 4 };
     RegexParser parser = new RegexParser( fieldDeclaration, regex, gisGroups );
     Pipe gisPipe = new Each( new Pipe( "gis" ), new Fields( "line" ), parser );
+
+    // checkpoint the cleaned-up GIS data
     Checkpoint tsvCheck = new Checkpoint( "tsv", gisPipe );
 
     // parse the "park" output
@@ -116,14 +122,14 @@ public class
 
     regex = "^(\\S+),(\\S+),(\\S+)\\s*$";
     int[] gpsGroups = { 1, 2, 3 };
-    parser = new RegexParser( new Fields( "lat", "lng", "alt" ), regex, gpsGroups );
+    parser = new RegexParser( new Fields( "tree_lat", "tree_lng", "tree_alt" ), regex, gpsGroups );
     treePipe = new Each( treePipe, new Fields( "geo" ), parser, Fields.ALL );
 
     // determine a tree geohash
-    Fields geohashArguments = new Fields( "lat", "lng" );
-    treePipe = new Each( treePipe, geohashArguments, new GeoHashFunction( new Fields( "tree_geohash" ) ), Fields.ALL );
+    Fields geohashArguments = new Fields( "tree_lat", "tree_lng" );
+    treePipe = new Each( treePipe, geohashArguments, new GeoHashFunction( new Fields( "tree_geohash" ), 6 ), Fields.ALL );
 
-    Fields fieldSelector = new Fields( "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "lat", "lng", "alt", "tree_geohash" );
+    Fields fieldSelector = new Fields( "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "tree_lat", "tree_lng", "tree_alt", "tree_geohash" );
     treePipe = new Retain( treePipe, fieldSelector );
 
     // parse the "road" output
@@ -150,7 +156,7 @@ public class
     roadPipe = new Each( roadPipe, segmentArguments, new RoadSegmentFunction( segmentResults ), Fields.ALL );
 
     geohashArguments = new Fields( "lat_mid", "lng_mid" );
-    roadPipe = new Each( roadPipe, geohashArguments, new GeoHashFunction( new Fields( "road_geohash" ) ), Fields.ALL );
+    roadPipe = new Each( roadPipe, geohashArguments, new GeoHashFunction( new Fields( "road_geohash" ), 6 ), Fields.ALL );
 
     fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "lat_mid", "lng_mid", "slope", "intercept", "road_geohash" );
     roadPipe = new Retain( roadPipe, fieldSelector );
@@ -160,20 +166,27 @@ public class
     shadePipe = new CoGroup( shadePipe, new Fields( "road_geohash" ), treePipe, new Fields( "tree_geohash" ), new InnerJoin() );
 
     // calculate a rough estimate for distance from tree to road, then filter for "< ~1 block"
-    Fields treeDistArguments = new Fields( "lat", "lng", "slope", "intercept" );
+    Fields treeDistArguments = new Fields( "tree_lat", "tree_lng", "slope", "intercept" );
     Fields tree_dist = new Fields( "tree_dist" );
     shadePipe = new Each( shadePipe, treeDistArguments, new TreeDistanceFunction( tree_dist ), Fields.ALL );
 
     ExpressionFilter distFilter = new ExpressionFilter( "tree_dist > 0.001", Double.class );
     shadePipe = new Each( shadePipe, tree_dist, distFilter );
 
-    // expand the geohash to join with a wider radius of logged GPS tracks
-    expression = "tree_geohash.substring(0, 4)";
-    exprFunc = new ExpressionFunction( new Fields( "shade_geohash" ), expression, String.class );
-    shadePipe = new Each( shadePipe, new Fields( "tree_geohash" ), exprFunc, Fields.ALL );
-
-    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "slope", "intercept", "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "lat", "lng", "alt", "tree_dist", "shade_geohash" );
+    // checkpoint this (big) calculation too
+    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "slope", "intercept", "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "tree_lat", "tree_lng", "tree_alt", "tree_dist", "tree_geohash" );
     shadePipe = new Retain( shadePipe, fieldSelector );
+    Checkpoint shadeCheck = new Checkpoint( "shade", shadePipe );
+
+    // determine the geohash for GPS tracks log events
+    Pipe logsPipe = new Pipe( "logs" );
+    geohashArguments = new Fields( "lat", "lng" );
+    logsPipe = new Each( logsPipe, geohashArguments, new GeoHashFunction( new Fields( "gps_geohash" ), 6 ), Fields.ALL );
+
+    // prepare data for recommendations
+    // NB: RHS is large given the sample data, but in practice the logs on the LHS could be much larger
+    Pipe recoPipe = new Pipe( "reco", logsPipe );
+    recoPipe = new CoGroup( recoPipe, new Fields( "gps_geohash" ), shadeCheck, new Fields( "tree_geohash" ), new InnerJoin() );
 
     // connect the taps, pipes, etc., into a flow
     FlowDef flowDef = FlowDef.flowDef()
@@ -186,7 +199,9 @@ public class
      .addSource( metaRoadPipe, metaRoadTap )
      .addSink( treePipe, treeTap )
      .addSink( roadPipe, roadTap )
-     .addTailSink( shadePipe, shadeTap )
+     .addCheckpoint( shadeCheck, shadeTap )
+     .addSource( logsPipe, logsTap )
+     .addTailSink( recoPipe, recoTap )
     ;
 
     // write a DOT file and run the flow

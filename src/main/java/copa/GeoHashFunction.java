@@ -33,9 +33,12 @@ import cascading.tuple.TupleEntry;
 
 public class GeoHashFunction extends BaseOperation implements Function
   {
-  public GeoHashFunction( Fields fieldDeclaration )
+  protected Integer hash_length = 0;
+
+  public GeoHashFunction( Fields fieldDeclaration, Integer hash_length )
     {
     super( 1, fieldDeclaration );
+    this.hash_length = hash_length;
     }
 
   public void operate( FlowProcess flowProcess, FunctionCall functionCall )
@@ -48,7 +51,7 @@ public class GeoHashFunction extends BaseOperation implements Function
     String geohash = ghu.encode( lat, lng );
 
     Tuple result = new Tuple();
-    result.add( geohash.substring( 0, 5 ) );
+    result.add( geohash.substring( 0, hash_length ) );
     functionCall.getOutputCollector().add( result );
     }
   }
