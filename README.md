@@ -34,6 +34,12 @@ To view the results, for example the output recommendations in `reco`:
 
 An example of log captured from a successful build+run is at [https://gist.github.com/3660888](https://gist.github.com/3660888)
 
+To run the R script, load `src/scripts/copa.R` into [RStudio](http://rstudio.org/) or from the command line run:
+
+    R --vanilla -slave < src/scripts/copa.R
+
+...and then check output in the file `Rplots.pdf`
+
 About Cascading
 ===============
 There is a tutorial about getting started with Cascading in the blog post series called [Cascading for the Impatient](http://www.cascading.org/category/impatient/). Other documentation is available at [http://www.cascading.org/documentation/](http://www.cascading.org/documentation/).
