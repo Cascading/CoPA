@@ -106,11 +106,11 @@ public class
     parser = new RegexParser( treeFields, regex, treeGroups );
     treePipe = new Each( treePipe, new Fields( "misc" ), parser, Fields.ALL );
 
+    // scrub "species" as a primary key
     regex = "^([\\w\\s]+).*$";
     int[] speciesGroups = { 1 };
     parser = new RegexParser( new Fields( "scrub_species" ), regex, speciesGroups );
     treePipe = new Each( treePipe, new Fields( "raw_species" ), parser, Fields.ALL );
-
     String expression = "scrub_species.trim().toLowerCase()";
     ExpressionFunction exprFunc = new ExpressionFunction( new Fields( "tree_species" ), expression, String.class );
     treePipe = new Each( treePipe, new Fields( "scrub_species" ), exprFunc, Fields.ALL );
