@@ -56,9 +56,6 @@ public class RoadSegmentFunction extends BaseOperation implements Function
       Double lat_mid = ( lat0 + lat1 ) / 2.0;
       Double lng_mid = ( lng0 + lng1 ) / 2.0;
 
-      Double slope = ( lat1 - lat0 ) / ( lng1 - lng0 );
-      Double intercept = lat0 - ( slope * lng0 );
-
       Tuple result = new Tuple();
 
       result.add( lat0 );
@@ -71,9 +68,6 @@ public class RoadSegmentFunction extends BaseOperation implements Function
 
       result.add( lat_mid );
       result.add( lng_mid );
-
-      result.add( slope );
-      result.add( intercept );
 
       functionCall.getOutputCollector().add( result );
       }

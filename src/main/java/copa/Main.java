@@ -32,6 +32,8 @@ import cascading.operation.regex.RegexParser;
 import cascading.pipe.CoGroup;
 import cascading.pipe.Checkpoint;
 import cascading.pipe.Each;
+import cascading.pipe.Every;
+import cascading.pipe.GroupBy;
 import cascading.pipe.HashJoin;
 import cascading.pipe.Pipe;
 import cascading.pipe.assembly.Rename;
@@ -152,13 +154,13 @@ public class
 
     // generate road segments, with midpoint, y=mx+b, and road_geohash for each
     Fields segmentArguments = new Fields( "geo" );
-    Fields segmentResults = new Fields( "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "lat_mid", "lng_mid", "slope", "intercept" );
+    Fields segmentResults = new Fields( "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "lat_mid", "lng_mid" );
     roadPipe = new Each( roadPipe, segmentArguments, new RoadSegmentFunction( segmentResults ), Fields.ALL );
 
     geohashArguments = new Fields( "lat_mid", "lng_mid" );
     roadPipe = new Each( roadPipe, geohashArguments, new GeoHashFunction( new Fields( "road_geohash" ), 6 ), Fields.ALL );
 
-    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "lat_mid", "lng_mid", "slope", "intercept", "road_geohash" );
+    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "road_geohash" );
     roadPipe = new Retain( roadPipe, fieldSelector );
 
     // join the tree and road pipes to estimate shade
@@ -166,16 +168,18 @@ public class
     shadePipe = new CoGroup( shadePipe, new Fields( "road_geohash" ), treePipe, new Fields( "tree_geohash" ), new InnerJoin() );
 
     // calculate a rough estimate for distance from tree to road, then filter for "< ~1 block"
-    Fields treeDistArguments = new Fields( "tree_lat", "tree_lng", "slope", "intercept" );
+    Fields treeDistArguments = new Fields( "tree_lat", "tree_lng", "lat0", "lng0", "lat1", "lng1" );
     Fields tree_dist = new Fields( "tree_dist" );
     shadePipe = new Each( shadePipe, treeDistArguments, new TreeDistanceFunction( tree_dist ), Fields.ALL );
 
-    ExpressionFilter distFilter = new ExpressionFilter( "tree_dist > 0.001", Double.class );
+    ExpressionFilter distFilter = new ExpressionFilter( "tree_dist > 25.0", Double.class );
     shadePipe = new Each( shadePipe, tree_dist, distFilter );
 
     // checkpoint this (big) calculation too
-    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "alt0", "lat1", "lng1", "alt1", "slope", "intercept", "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "tree_lat", "tree_lng", "tree_alt", "tree_dist", "tree_geohash" );
+    fieldSelector = new Fields( "road_name", "year_construct", "traffic_count", "traffic_index", "traffic_class", "paving_length", "paving_width", "paving_area", "surface_type", "bike_lane", "bus_route", "truck_route", "albedo", "lat0", "lng0", "lat1", "lng1", "tree_name", "priv", "tree_id", "situs", "tree_site", "species", "wikipedia", "calflora", "min_height", "max_height", "tree_lat", "tree_lng", "tree_alt", "tree_dist", "tree_geohash" );
     shadePipe = new Retain( shadePipe, fieldSelector );
+    shadePipe = new GroupBy( shadePipe, new Fields( "tree_name" ), new Fields( "tree_dist" ) );
+
     Checkpoint shadeCheck = new Checkpoint( "shade", shadePipe );
 
     // determine the geohash for GPS tracks log events

@@ -952,8 +952,9 @@ Metadata}</string>
 \pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc
 
 \f0\b\fs20 \cf0 Scrub\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc
 
-\b0 species}</string>
+\b0 \cf0 species}</string>
 			</dict>
 		</dict>
 		<dict>
@@ -3569,8 +3570,9 @@ Metadata}</string>
 \pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc
 
 \f0\b\fs20 \cf0 Checkpoint\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\qc
 
-\b0 tsv}</string>
+\b0 \cf0 tsv}</string>
 			</dict>
 		</dict>
 		<dict>
@@ -4882,6 +4884,8 @@ Metadata}</string>
 		<integer>0</integer>
 		<key>ExpandedCanvases</key>
 		<array/>
+		<key>FitInWindow</key>
+		<true/>
 		<key>Frame</key>
 		<string>{{246, 4}, {1034, 771}}</string>
 		<key>ListView</key>
@@ -4897,15 +4901,15 @@ Metadata}</string>
 		<key>SidebarWidth</key>
 		<integer>120</integer>
 		<key>VisibleRegion</key>
-		<string>{{73, 107}, {1020, 632}}</string>
+		<string>{{0, -48}, {1942.0958745801363, 1203.337836014359}}</string>
 		<key>Zoom</key>
-		<real>1</real>
+		<real>0.52520579099655151</real>
 		<key>ZoomValues</key>
 		<array>
 			<array>
 				<string>6: tf-idf + tdd</string>
-				<real>1</real>
 				<real>0.0</real>
+				<real>1</real>
 			</array>
 		</array>
 	</dict>
