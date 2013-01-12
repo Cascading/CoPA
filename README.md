@@ -40,9 +40,22 @@ To run the R script, load `src/scripts/copa.R` into [RStudio](http://rstudio.org
 
 ...and then check output in the file `Rplots.pdf`
 
+
+Cascalog Build
+==============
+See the leiningen build script in `project.clj` and the source in the `src/main/clj/copa` directory.
+
+To build and run:
+
+    lein clean
+    lein uberjar
+    rm -rf output/ 
+    hadoop jar ./target/copa.jar data/copa.csv output/gis output/trap
+
+
 About Cascading
 ===============
 There is a tutorial about getting started with Cascading in the blog post series called [Cascading for the Impatient](http://www.cascading.org/category/impatient/). Other documentation is available at [http://www.cascading.org/documentation/](http://www.cascading.org/documentation/).
 
-For more discussion, see the [cascading-user](https://groups.google.com/forum/?fromgroups#!forum/cascading-user) email forum. We also have a [meetup](http://www.meetup.com/cascading/) started.
-
+For more discussion, see the [cascading-user](https://groups.google.com/forum/?fromgroups#!forum/cascading-user) email forum 
+or check out one of our [meetups](http://www.meetup.com/cascading/).
