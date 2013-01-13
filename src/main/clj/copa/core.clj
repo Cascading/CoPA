@@ -6,6 +6,7 @@
   (:require [clojure.string :as s]
             [cascalog [ops :as c] [vars :as v]]
             [clojure-csv.core :as csv]
+            [geohash.core :as geo]
    )
   (:gen-class))
 
@@ -20,20 +21,9 @@
   "generator to parse fields from the GIS source tap"
   (<- [?blurb ?misc ?geo ?kind]
       (gis ?line)
-      (parse-gis ?line :> ?blurb, ?misc, ?geo, ?kind)
+      (parse-gis ?line :> ?blurb ?misc ?geo ?kind)
       (:distinct false)
       (:trap (hfs-textline trap))
-   )
- )
-
-
-(defn get-parks [src trap]
-  "filter/parse the park data"
-  (<- [?blurb, ?misc, ?geo, ?kind]
-      (src ?blurb, ?misc, ?geo, ?kind)
-      (re-matches
-        #"\s+Community Type\:\s+Park.*"
-        ?misc)
    )
  )
 
@@ -49,14 +39,32 @@
  )
 
 
-(defn get-trees [src trap]
+(defn geo-tree [geo]
+  "parse geolocation for tree format"
+  (let [x (re-seq
+    #"^(\S+),(\S+),(\S+)\s*$"
+    geo)]
+    (> (count x) 0)
+    (> (count (first x)) 1)
+    (first x))
+ )
+
+
+(defn get-trees [src trap tree_meta]
   "filter/parse the tree data"
-  (<- [?blurb, ?misc, ?geo, ?kind ?priv, ?tree_id, ?situs, ?tree_site, ?tree_species]
-      (src ?blurb, ?misc, ?geo, ?kind)
+  (<- [?blurb ?misc ?geo ?kind ?priv
+       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?tree_lat ?tree_lng ?tree_alt ?tree_geohash]
+      (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Private\:\s+(\S+)\s+Tree ID\:\s+.*" ?misc)
       (parse-tree ?misc :> _ 
-        ?priv, ?tree_id, ?situs, ?tree_site, ?raw_species)
-      ((c/comp s/trim s/lower-case) ?raw_species :> ?tree_species)
+        ?priv ?tree_id ?situs ?tree_site ?raw_species)
+      ((c/comp s/trim s/lower-case) ?raw_species :> ?species)
+      (tree_meta ?species ?wikipedia ?calflora ?min_height ?max_height)
+      (geo-tree ?geo :> _ ?tree_lat ?tree_lng ?tree_alt)
+      (read-string ?tree_lat :> ?lat)
+      (read-string ?tree_lng :> ?lng)
+      (geo/encode ?lat ?lng 6 :> ?tree_geohash)
       (:trap (hfs-textline trap))
    )
  )
@@ -73,34 +81,46 @@
  )
 
 
-(defn get-roads [src trap]
+(defn get-roads [src trap road_meta]
   "filter/parse the road data"
-  (<- [?blurb, ?misc, ?geo, ?kind
+  (<- [?blurb ?misc ?geo ?kind
        ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route]
-      (src ?blurb, ?misc, ?geo, ?kind)
+       ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route ?albedo_new ?albedo_worn]
+      (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Sequence\:.*\s+Year Constructed\:\s+(\d+)\s+Traffic.*" ?misc)
       (parse-road ?misc :> _
         ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-        ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route)
+        ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route)
+      (road_meta ?pavement_type ?albedo_new ?albedo_worn)
       (:trap (hfs-textline trap))
    )
  )
 
 
-(defn -main [in meta_tree meta_road trap park tree road & args]
+(defn get-parks [src trap]
+  "filter/parse the park data"
+  (<- [?blurb ?misc ?geo ?kind]
+      (src ?blurb ?misc ?geo ?kind)
+      (re-matches
+        #"\s+Community Type\:\s+Park.*"
+        ?misc)
+   )
+ )
+
+
+(defn -main [in meta_tree meta_road trap park_sink tree_sink road_sink & args]
   (let [gis (hfs-delimited in)
         tree_meta (hfs-delimited meta_tree :skip-header? true)
         road_meta (hfs-delimited meta_road :skip-header? true)
         src (etl-gis gis (s/join "/" [trap "gis"]))]
-    (?- (hfs-delimited park)
+    (?- (hfs-delimited tree_sink)
+        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
+     )
+    (?- (hfs-delimited road_sink)
+        (get-roads src (s/join "/" [trap "road"]) road_meta)
+     )
+    (?- (hfs-delimited park_sink)
         (get-parks src (s/join "/" [trap "park"]))
-     )
-    (?- (hfs-delimited tree)
-        (get-trees src (s/join "/" [trap "tree"]))
-     )
-    (?- (hfs-delimited road)
-        (get-roads src (s/join "/" [trap "road"]))
      )
    )
  )
