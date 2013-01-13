@@ -1,9 +1,12 @@
 (ns copa.core
   (:use [cascalog.api]
-        [cascalog.more-taps :only (hfs-delimited)])
+        [cascalog.checkpoint]
+        [cascalog.more-taps :only (hfs-delimited)]
+   )
   (:require [clojure.string :as s]
-            [cascalog.ops :as c]
-            [clojure-csv.core :as csv])
+            [cascalog [ops :as c] [vars :as v]]
+            [clojure-csv.core :as csv]
+   )
   (:gen-class))
 
 
@@ -16,6 +19,9 @@
   (?<- (hfs-delimited out)
        [?blurb ?misc ?geo ?kind]
        ((hfs-delimited in) ?line)
-       (:trap (hfs-textline trap))
        (parse-gis ?line :> ?blurb, ?misc, ?geo, ?kind)
-  ))
+       (:trap (hfs-textline trap))
+       (:distinct false)
+       (re-matches #"\s+Community Type\:\s+Park.*" ?misc)
+   )
+ )
