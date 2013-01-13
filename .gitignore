@@ -1,15 +1,17 @@
+*~
+*.class
+.DS_Store
+
+# Java Files #
 build/
 output/
 dot/
 .gradle/
 
-*~
-*.class
-.DS_Store
-
 # Cascalog Files #
 repl-port
 target/
+out/
 
 # Package Files #
 *.jar

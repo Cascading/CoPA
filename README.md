@@ -50,7 +50,7 @@ To build and run:
     lein clean
     lein uberjar
     rm -rf output/ 
-    hadoop jar ./target/copa.jar data/copa.csv output/gis output/trap
+    hadoop jar ./target/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv out/trap out/park out/tree
 
 
 About Cascading
