@@ -81,17 +81,28 @@
  )
 
 
+(defn estimate-albedo [year_construct albedo_new albedo_worn]
+  (cond
+    (>= (read-string year_construct) 2002)
+      (read-string albedo_new)
+    :else
+      (read-string albedo_worn)
+   )
+ )
+
+
 (defn get-roads [src trap road_meta]
   "filter/parse the road data"
   (<- [?blurb ?misc ?geo ?kind
        ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route ?albedo_new ?albedo_worn]
+       ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route ?albedo_new ?albedo_worn ?albedo]
       (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Sequence\:.*\s+Year Constructed\:\s+(\d+)\s+Traffic.*" ?misc)
       (parse-road ?misc :> _
         ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
         ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route)
       (road_meta ?pavement_type ?albedo_new ?albedo_worn)
+      (estimate-albedo ?year_construct ?albedo_new ?albedo_worn :> ?albedo)
       (:trap (hfs-textline trap))
    )
  )
