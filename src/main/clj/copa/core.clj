@@ -54,7 +54,7 @@
   "filter/parse the tree data"
   (<- [?blurb ?misc ?geo ?kind ?priv
        ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
-       ?tree_lat ?tree_lng ?tree_alt ?tree_geohash]
+       ?tree_lat ?tree_lng ?tree_alt ?geohash]
       (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Private\:\s+(\S+)\s+Tree ID\:\s+.*" ?misc)
       (parse-tree ?misc :> _ 
@@ -64,7 +64,7 @@
       (geo-tree ?geo :> _ ?tree_lat ?tree_lng ?tree_alt)
       (read-string ?tree_lat :> ?lat)
       (read-string ?tree_lng :> ?lng)
-      (geo/encode ?lat ?lng 6 :> ?tree_geohash)
+      (geo/encode ?lat ?lng 6 :> ?geohash)
       (:trap (hfs-textline trap))
    )
  )
@@ -134,19 +134,29 @@
  )
 
 
+(defmapcatop geo-split [geo]
+   (seq (.split geo "\\s+"))
+ )
+
+
 (defn get-roads [src trap road_meta]
   "filter/parse the road data"
   (<- [?blurb ?misc ?geo ?kind
        ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route ?albedo_new ?albedo_worn ?albedo ?l]
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo_new ?albedo_worn ?albedo
+       ?geo_set ?road_lat ?road_lng ?road_alt ?geohash]
       (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Sequence\:.*\s+Year Constructed\:\s+(\d+)\s+Traffic.*" ?misc)
       (parse-road ?misc :> _
         ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-        ?paving_area ?pavement_type ?bike_lane ?bus_route ?truck_route)
-      (road_meta ?pavement_type ?albedo_new ?albedo_worn)
+        ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route)
+      (road_meta ?surface_type ?albedo_new ?albedo_worn)
       (estimate-albedo ?year_construct ?albedo_new ?albedo_worn :> ?albedo)
-      (get-geo-segs ?geo :> ?l)
+      (geo-split ?geo :> ?geo_set)
+      (s/split ?geo_set #"," :> ?road_lat ?road_lng ?road_alt)
+      (read-string ?road_lat :> ?lat)
+      (read-string ?road_lng :> ?lng)
+      (geo/encode ?lat ?lng 6 :> ?geohash)
       (:trap (hfs-textline trap))
    )
  )
@@ -163,17 +173,50 @@
  )
 
 
-(defn -main [in meta_tree meta_road trap park_sink tree_sink road_sink & args]
+(defn get-shade [tree_sink road_sink]
+  "join trees and roads estimates to find shade"
+  (<- [?tree_name ?priv
+       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?tree_lat ?tree_lng ?tree_alt ?geohash
+
+       ?road_name
+       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo
+       ?road_lat ?road_lng ?road_alt]
+
+      (tree_sink ?tree_name _ _ _ ?priv
+       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?tree_lat ?tree_lng ?tree_alt ?geohash)
+
+      (road_sink ?road_name _ _ _
+       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route _ _ ?albedo
+       _ ?road_lat ?road_lng ?road_alt ?geohash)
+   )
+ )
+
+
+(defn -main [in meta_tree meta_road trap park_sink tree_sink road_sink shade & args]
   (let [gis (hfs-delimited in)
         tree_meta (hfs-delimited meta_tree :skip-header? true)
         road_meta (hfs-delimited meta_road :skip-header? true)
-        src (etl-gis gis (s/join "/" [trap "gis"]))]
-    (?- (hfs-delimited tree_sink)
-        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
+        src (etl-gis gis (s/join "/" [trap "gis"]))
+        tree_sink (get-trees src (s/join "/" [trap "tree"]) tree_meta)
+        road_sink (get-roads src (s/join "/" [trap "road"]) road_meta)
+        ]
+
+    (?- (hfs-delimited shade)
+        (get-shade tree_sink road_sink)
      )
-    (?- (hfs-delimited road_sink)
-        (get-roads src (s/join "/" [trap "road"]) road_meta)
-     )
+
+;    (?- (hfs-delimited tree_sink)
+;        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
+;     )
+
+;    (?- (hfs-delimited road_sink)
+;        (get-roads src (s/join "/" [trap "road"]) road_meta)
+;     )
+
     (?- (hfs-delimited park_sink)
         (get-parks src (s/join "/" [trap "park"]))
      )
