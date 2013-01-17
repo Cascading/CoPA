@@ -1,7 +1,7 @@
 (ns copa.core
   (:use [cascalog.api]
-        [cascalog.checkpoint]
         [cascalog.more-taps :only (hfs-delimited)]
+        [clojure.contrib.math :only (sqrt expt)]
    )
   (:require [clojure.string :as s]
             [cascalog [ops :as c] [vars :as v]]
@@ -153,7 +153,7 @@
       (road_meta ?surface_type ?albedo_new ?albedo_worn)
       (estimate-albedo ?year_construct ?albedo_new ?albedo_worn :> ?albedo)
       (geo-split ?geo :> ?geo_set)
-      (s/split ?geo_set #"," :> ?road_lat ?road_lng ?road_alt)
+      (s/split ?geo_set #"," :> ?road_lng ?road_lat ?road_alt)
       (read-string ?road_lat :> ?lat)
       (read-string ?road_lng :> ?lng)
       (geo/encode ?lat ?lng 6 :> ?geohash)
@@ -173,7 +173,16 @@
  )
 
 
-(defn get-shade [tree_sink road_sink]
+(defn tree-distance [tree_lat tree_lng road_lat road_lng]
+ (let [y (- (read-string tree_lat) (read-string road_lat))
+       x (- (read-string tree_lng) (read-string road_lng))
+       ]
+   (sqrt (+ (expt y 2.0) (expt x 2.0)))
+  )
+ )
+
+
+(defn get-shade [trees roads]
   "join trees and roads estimates to find shade"
   (<- [?tree_name ?priv
        ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
@@ -181,44 +190,87 @@
 
        ?road_name
        ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo
-       ?road_lat ?road_lng ?road_alt]
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
+       ]
 
-      (tree_sink ?tree_name _ _ _ ?priv
+      (trees ?tree_name _ _ _ ?priv
        ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
        ?tree_lat ?tree_lng ?tree_alt ?geohash)
 
-      (road_sink ?road_name _ _ _
+      (roads ?road_name _ _ _
        ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
        ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route _ _ ?albedo
        _ ?road_lat ?road_lng ?road_alt ?geohash)
+
+      (tree-distance ?tree_lat ?tree_lng ?road_lat ?road_lng :> ?dist)
+      (<= ?dist 25.0)
    )
  )
 
 
-(defn -main [in meta_tree meta_road trap park_sink tree_sink road_sink shade & args]
+(defn get-reco [gps_logs trap shades]
+  (<- [?date ?uuid ?lat ?lng ?alt ?speed ?heading ?elapsed ?distance
+       ?tree_name ?priv
+       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?tree_lat ?tree_lng ?tree_alt ?geohash
+
+       ?road_name
+       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
+      ]
+
+      (gps_logs ?date ?uuid ?gps_lat ?gps_lng ?alt ?speed ?heading ?elapsed ?distance)
+      (read-string ?gps_lat :> ?lat)
+      (read-string ?gps_lng :> ?lng)
+      (geo/encode ?lat ?lng 6 :> ?geohash)
+
+      (shades ?tree_name ?priv
+       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?tree_lat ?tree_lng ?tree_alt ?geohash
+
+       ?road_name
+       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
+       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
+       )
+   )
+ )
+
+
+(defn -main
+  [in meta_tree meta_road logs trap park tree road shade reco & args]
+
   (let [gis (hfs-delimited in)
         tree_meta (hfs-delimited meta_tree :skip-header? true)
         road_meta (hfs-delimited meta_road :skip-header? true)
+        gps_logs (hfs-delimited logs :delimiter "," :skip-header? true)
         src (etl-gis gis (s/join "/" [trap "gis"]))
-        tree_sink (get-trees src (s/join "/" [trap "tree"]) tree_meta)
-        road_sink (get-roads src (s/join "/" [trap "road"]) road_meta)
-        ]
+       ]
 
-    (?- (hfs-delimited shade)
-        (get-shade tree_sink road_sink)
+    (?- (hfs-delimited tree)
+        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
      )
 
-;    (?- (hfs-delimited tree_sink)
-;        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
-;     )
+    (?- (hfs-delimited road)
+        (get-roads src (s/join "/" [trap "road"]) road_meta)
+     )
 
-;    (?- (hfs-delimited road_sink)
-;        (get-roads src (s/join "/" [trap "road"]) road_meta)
-;     )
-
-    (?- (hfs-delimited park_sink)
+    (?- (hfs-delimited park)
         (get-parks src (s/join "/" [trap "park"]))
      )
+
+    (?- (hfs-delimited shade)
+        (let [trees (hfs-delimited tree)
+              roads (hfs-delimited road)
+             ]
+          (get-shade trees roads)
+         )
+     )
+
+    (?- (hfs-delimited reco)
+        (let [shades (hfs-delimited shade)]
+          (get-reco gps_logs (s/join "/" [trap "logs"]) shades)
+         )
+     )
+
    )
  )
