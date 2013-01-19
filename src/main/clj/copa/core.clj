@@ -2,6 +2,7 @@
   (:use [cascalog.api]
         [cascalog.more-taps :only (hfs-delimited)]
         [clojure.contrib.generic.math-functions]
+        [date-clj]
    )
   (:require [clojure.string :as s]
             [cascalog [ops :as c] [vars :as v]]
@@ -26,6 +27,18 @@
    ))
 
 
+(defn avg [a b]
+  "calculates the average of two decimals"
+  (/ (+ (read-string a) (read-string b)) 2.0)
+ )
+
+
+(defn geohash [lat lng]
+  "calculates a geohash, at a common resolution"
+  (geo/encode lat lng 6)
+  )
+
+
 (defn parse-tree [misc]
   "parses the special fields in the tree format"
   (let [x (re-seq
@@ -34,13 +47,8 @@
     (> (count x) 0)
     (> (count (first x)) 1)
     (first x)
+    ;; backflips to trap data quality issues in the GIS export
    ))
-
-
-(defn avg [a b]
-  "calculates the average of two decimals"
-  (/ (+ (read-string a) (read-string b)) 2.0)
- )
 
 
 (defn geo-tree [geo]
@@ -49,6 +57,7 @@
     (> (count x) 0)
     (> (count (first x)) 1)
     (first x)
+    ;; backflips to trap data quality issues in the GIS export
    ))
 
 
@@ -67,7 +76,7 @@
       (geo-tree ?geo :> _ ?tree_lat ?tree_lng ?tree_alt)
       (read-string ?tree_lat :> ?lat)
       (read-string ?tree_lng :> ?lng)
-      (geo/encode ?lat ?lng 6 :> ?geohash)
+      (geohash ?lat ?lng :> ?geohash)
       (:trap (hfs-textline trap))
    ))
 
@@ -80,13 +89,14 @@
     (> (count x) 0)
     (> (count (first x)) 1)
     (first x)
+    ;; backflips to trap data quality issues in the GIS export
    ))
 
 
 (defn estimate-albedo [overlay_year albedo_new albedo_worn]
   "calculates an estimator for road albedo, based on road surface age"
   (cond
-    (>= (read-string overlay_year) 2002)
+    (>= (read-string overlay_year) (- (year (today)) 10.0))
       (read-string albedo_new)
     :else
       (read-string albedo_worn)
@@ -135,7 +145,7 @@
       (c/min ?lat :> ?min_lat)
       (c/min ?lng :> ?min_lng)
       (c/min ?alt :> ?min_alt)
-      (geo/encode ?min_lat ?min_lng 6 :> ?geohash)
+      (geohash ?min_lat ?min_lng :> ?geohash)
       (:trap (hfs-textline trap))
    ))
 
@@ -163,6 +173,7 @@
       (= traffic_class "local residential") 1.0
       (= traffic_class "local business district") 0.5
       :else 0.0)
+    ;; scale traffic_count based on distribution mean
     (/ (log (/ (read-string traffic_count) 200.0)) 5.0)
     (- 1.0 (read-string albedo))
     ]]
@@ -178,11 +189,14 @@
       (road-metric ?traffic_class ?traffic_count ?albedo :> ?road_metric)
       (trees _ _ _ _ _ _ _ ?avg_height ?tree_lat ?tree_lng ?tree_alt ?geohash)
       (read-string ?avg_height :> ?height)
+      ;; limit to trees which are higher than people
       (> ?height 2.0)
       (tree-distance ?tree_lat ?tree_lng ?road_lat ?road_lng :> ?distance)
+      ;; limit to trees within a one-block radius (not meters)
       (<= ?distance 25.0)
       (/ ?height ?distance :> ?tree_moment)
       (c/sum ?tree_moment :> ?sum_tree_moment)
+      ;; magic number 200000.0 used to scale tree moment, based on median
       (/ ?sum_tree_moment 200000.0 :> ?tree_metric)
    ))
 
@@ -202,7 +216,7 @@
       (gps_logs ?date ?uuid ?gps_lat ?gps_lng ?alt ?speed ?heading ?elapsed ?distance)
       (read-string ?gps_lat :> ?lat)
       (read-string ?gps_lng :> ?lng)
-      (geo/encode ?lat ?lng 6 :> ?geohash)
+      (geohash ?lat ?lng :> ?geohash)
       (c/count :> ?gps_count)
       (date-num ?date :> ?visit)
       (c/max ?visit :> ?recent_visit)

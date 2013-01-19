@@ -15,6 +15,7 @@
                  [clojure-csv/clojure-csv "1.3.2"]
                  [org.clojars.sunng/geohash "1.0.1"]
                  [org.clojure/clojure-contrib "1.2.0"]
+                 [date-clj "1.0.1"]
                  ]
   :profiles {:dev {:dependencies [[midje-cascalog "0.4.0"]]}
              :provided {:dependencies [[org.apache.hadoop/hadoop-core "0.20.2-dev"]]}}
