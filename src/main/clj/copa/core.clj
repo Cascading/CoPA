@@ -37,6 +37,12 @@
    ))
 
 
+(defn avg [a b]
+  "calculates the average of two decimals"
+  (/ (+ (read-string a) (read-string b)) 2.0)
+ )
+
+
 (defn geo-tree [geo]
   "parses geolocation for tree format"
   (let [x (re-seq #"^(\S+),(\S+),(\S+)\s*$" geo)]
@@ -49,7 +55,7 @@
 (defn get-trees [src trap tree_meta]
   "subquery to parse/filter the tree data"
   (<- [?blurb ?tree_id ?situs ?tree_site
-       ?species ?wikipedia ?calflora ?min_height ?max_height
+       ?species ?wikipedia ?calflora ?avg_height
        ?tree_lat ?tree_lng ?tree_alt ?geohash
        ]
       (src ?blurb ?misc ?geo ?kind)
@@ -57,6 +63,7 @@
       (parse-tree ?misc :> _ ?priv ?tree_id ?situs ?tree_site ?raw_species)
       ((c/comp s/trim s/lower-case) ?raw_species :> ?species)
       (tree_meta ?species ?wikipedia ?calflora ?min_height ?max_height)
+      (avg ?min_height ?max_height :> ?avg_height)
       (geo-tree ?geo :> _ ?tree_lat ?tree_lng ?tree_alt)
       (read-string ?tree_lat :> ?lat)
       (read-string ?tree_lng :> ?lng)
@@ -142,7 +149,7 @@
 
 
 (defn tree-distance [tree_lat tree_lng road_lat road_lng]
-  "calculates distance from a tree to the midpoint of a road segment; TODO IMPROVE"
+  "calculates distance from a tree to the midpoint of a road segment; TODO IMPROVE GEO MODEL"
   (let [y (- (read-string tree_lat) (read-string road_lat))
         x (- (read-string tree_lng) (read-string road_lng))
         ]
@@ -151,27 +158,26 @@
 
 
 (defn get-shade [trees roads]
-  "join trees and roads estimates to find shade"
-  (<- [?tree_name ?priv
-       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
-       ?tree_lat ?tree_lng ?tree_alt ?geohash
-
-       ?road_name
-       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
+  "subquery to join the tree and road estimates, to maximize for shade"
+  (<- [?road_name ?sum_weighted ?albedo
+       ?geohash ?road_lat ?road_lng ?road_alt
+       ?bike_lane ?bus_route ?truck_route 
+       ?traffic_count ?traffic_index ?traffic_class
+       ?paving_length ?paving_width ?paving_area ?surface_type
        ]
 
-      (trees ?tree_name _ _ _ ?priv
-       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
-       ?tree_lat ?tree_lng ?tree_alt ?geohash)
-
-      (roads ?road_name _ _ _
-       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route _ _ ?albedo
-       _ ?road_lat ?road_lng ?road_alt ?geohash)
-
-      (tree-distance ?tree_lat ?tree_lng ?road_lat ?road_lng :> ?dist)
-      (<= ?dist 25.0)
+      (roads ?road_name ?bike_lane ?bus_route ?truck_route ?albedo
+       ?road_lat ?road_lng ?road_alt ?geohash
+       ?traffic_count ?traffic_index ?traffic_class
+       ?paving_length ?paving_width ?paving_area ?surface_type
+       )
+      (trees _ _ _ _ _ _ _ ?avg_height ?tree_lat ?tree_lng ?tree_alt ?geohash)
+      (read-string ?avg_height :> ?height)
+      (> ?height 2.0)
+      (tree-distance ?tree_lat ?tree_lng ?road_lat ?road_lng :> ?distance)
+      (<= ?distance 25.0)
+      (* ?height ?distance :> ?weighted)
+      (c/sum ?weighted :> ?sum_weighted)
    ))
 
 
@@ -192,13 +198,12 @@
       (read-string ?gps_lng :> ?lng)
       (geo/encode ?lat ?lng 6 :> ?geohash)
 
-      (shades ?tree_name ?priv
-       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
-       ?tree_lat ?tree_lng ?tree_alt ?geohash
-
-       ?road_name
-       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
+      (shades ?road_name ?bike_lane ?bus_route ?truck_route ?albedo
+       ?geohash ?road_lat ?road_lng ?road_alt
+       ?traffic_count ?traffic_index ?traffic_class
+       ?paving_length ?paving_width ?paving_area ?surface_type
+       ?species ?avg_height ?distance ?wikipedia ?calflora
+       ?tree_id ?situs ?tree_site ?tree_lat ?tree_lng ?tree_alt
        )
    ))
 
@@ -221,16 +226,16 @@
         (get-roads src (s/join "/" [trap "road"]) road_meta)
      )
 
-;    (?- (hfs-delimited park)
-;        (get-parks src (s/join "/" [trap "park"]))
-;     )
+    (?- (hfs-delimited park)
+        (get-parks src (s/join "/" [trap "park"]))
+     )
 
-;    (?- (hfs-delimited shade)
-;        (let [trees (hfs-delimited tree)
-;              roads (hfs-delimited road)
-;             ]
-;          (get-shade trees roads)
-;         ))
+    (?- (hfs-delimited shade)
+        (let [trees (hfs-delimited tree)
+              roads (hfs-delimited road)
+             ]
+          (get-shade trees roads)
+         ))
 
 ;    (?- (hfs-delimited reco)
 ;        (let [shades (hfs-delimited shade)]
