@@ -1,7 +1,7 @@
 (ns copa.core
   (:use [cascalog.api]
         [cascalog.more-taps :only (hfs-delimited)]
-        [clojure.contrib.math :only (sqrt expt)]
+        [clojure.contrib.generic.math-functions]
    )
   (:require [clojure.string :as s]
             [cascalog [ops :as c] [vars :as v]]
@@ -84,7 +84,7 @@
 
 
 (defn estimate-albedo [overlay_year albedo_new albedo_worn]
-  "calculates an estimator for road albedo, based on surface age"
+  "calculates an estimator for road albedo, based on road surface age"
   (cond
     (>= (read-string overlay_year) 2002)
       (read-string albedo_new)
@@ -153,63 +153,72 @@
   (let [y (- (read-string tree_lat) (read-string road_lat))
         x (- (read-string tree_lng) (read-string road_lng))
         ]
-    (sqrt (+ (expt y 2.0) (expt x 2.0)))
+    (sqrt (+ (pow y 2.0) (pow x 2.0)))
    ))
+
+
+(defn road-metric [traffic_class traffic_count albedo]
+  "calculates a metric for comparing road segments, approximating a decision tree; TODO USE PMML"
+  [[(cond 
+      (= traffic_class "local residential") 1.0
+      (= traffic_class "local business district") 0.5
+      :else 0.0)
+    (/ (log (/ (read-string traffic_count) 200.0)) 5.0)
+    (- 1.0 (read-string albedo))
+    ]]
+    ;; in practice, we'd probably train a predictive model using decision trees, 
+    ;; regression, etc., plus incorporate customer feedback, QA of the data, etc.
+  )
 
 
 (defn get-shade [trees roads]
   "subquery to join the tree and road estimates, to maximize for shade"
-  (<- [?road_name ?sum_weighted ?albedo
-       ?geohash ?road_lat ?road_lng ?road_alt
-       ?bike_lane ?bus_route ?truck_route 
-       ?traffic_count ?traffic_index ?traffic_class
-       ?paving_length ?paving_width ?paving_area ?surface_type
-       ]
-
-      (roads ?road_name ?bike_lane ?bus_route ?truck_route ?albedo
-       ?road_lat ?road_lng ?road_alt ?geohash
-       ?traffic_count ?traffic_index ?traffic_class
-       ?paving_length ?paving_width ?paving_area ?surface_type
-       )
+  (<- [?road_name ?geohash ?road_lat ?road_lng ?road_alt ?road_metric ?tree_metric]
+      (roads ?road_name _ _ _ ?albedo ?road_lat ?road_lng ?road_alt ?geohash ?traffic_count _ ?traffic_class  _ _ _ _)
+      (road-metric ?traffic_class ?traffic_count ?albedo :> ?road_metric)
       (trees _ _ _ _ _ _ _ ?avg_height ?tree_lat ?tree_lng ?tree_alt ?geohash)
       (read-string ?avg_height :> ?height)
       (> ?height 2.0)
       (tree-distance ?tree_lat ?tree_lng ?road_lat ?road_lng :> ?distance)
       (<= ?distance 25.0)
-      (* ?height ?distance :> ?weighted)
-      (c/sum ?weighted :> ?sum_weighted)
+      (/ ?height ?distance :> ?tree_moment)
+      (c/sum ?tree_moment :> ?sum_tree_moment)
+      (/ ?sum_tree_moment 200000.0 :> ?tree_metric)
    ))
 
 
-(defn get-reco [gps_logs trap shades]
-  "subquery to recommend road segments based on GPS tracks"
-  (<- [?date ?uuid ?lat ?lng ?alt ?speed ?heading ?elapsed ?distance
-       ?tree_name ?priv
-       ?tree_id ?situs ?tree_site ?species ?wikipedia ?calflora ?min_height ?max_height
-       ?tree_lat ?tree_lng ?tree_alt ?geohash
+(defn date-num [date]
+  "converts an RFC 3339 timestamp to a monotonically increasing number"
+  (apply
+   (fn [yr mon day hr min sec]
+       (+ (* (+ (* (+ (* (+ (* (+ (* yr 366) mon) 31) day) 24) hr) 60) min) 60) sec))
+   (map #(Integer/parseInt %) (re-seq #"\d+" date))
+   ))
 
-       ?road_name
-       ?year_construct ?traffic_count ?traffic_index ?traffic_class ?paving_length ?paving_width
-       ?paving_area ?surface_type ?bike_lane ?bus_route ?truck_route ?albedo ?dist
-      ]
 
+(defn get-gps [gps_logs trap]
+  "subquery to aggregate and rank GPS tracks per user"
+  (<- [?uuid ?geohash ?gps_count ?recent_visit]
       (gps_logs ?date ?uuid ?gps_lat ?gps_lng ?alt ?speed ?heading ?elapsed ?distance)
       (read-string ?gps_lat :> ?lat)
       (read-string ?gps_lng :> ?lng)
       (geo/encode ?lat ?lng 6 :> ?geohash)
+      (c/count :> ?gps_count)
+      (date-num ?date :> ?visit)
+      (c/max ?visit :> ?recent_visit)
+ ))
 
-      (shades ?road_name ?bike_lane ?bus_route ?truck_route ?albedo
-       ?geohash ?road_lat ?road_lng ?road_alt
-       ?traffic_count ?traffic_index ?traffic_class
-       ?paving_length ?paving_width ?paving_area ?surface_type
-       ?species ?avg_height ?distance ?wikipedia ?calflora
-       ?tree_id ?situs ?tree_site ?tree_lat ?tree_lng ?tree_alt
-       )
+
+(defn get-reco [tracks shades]
+  "subquery to recommend road segments based on GPS tracks"
+  (<- [?uuid ?road ?geohash ?lat ?lng ?alt ?gps_count ?recent_visit ?road_metric ?tree_metric]
+      (tracks ?uuid ?geohash ?gps_count ?recent_visit)
+      (shades ?road ?geohash ?lat ?lng ?alt ?road_metric ?tree_metric)
    ))
 
 
 (defn -main
-  [in meta_tree meta_road logs trap park tree road shade reco & args]
+  [in meta_tree meta_road logs trap park tree road shade gps reco & args]
 
   (let [gis (hfs-delimited in)
         tree_meta (hfs-delimited meta_tree :skip-header? true)
@@ -233,13 +242,18 @@
     (?- (hfs-delimited shade)
         (let [trees (hfs-delimited tree)
               roads (hfs-delimited road)
-             ]
+              ]
           (get-shade trees roads)
          ))
 
-;    (?- (hfs-delimited reco)
-;        (let [shades (hfs-delimited shade)]
-;          (get-reco gps_logs (s/join "/" [trap "logs"]) shades)
-;         ))
+    (?- (hfs-delimited gps)
+        (get-gps gps_logs (s/join "/" [trap "logs"]))
+     )
 
+    (?- (hfs-delimited reco)
+        (let [tracks (hfs-delimited gps)
+              shades (hfs-delimited shade)
+              ]
+          (get-reco tracks shades)
+         ))
    ))

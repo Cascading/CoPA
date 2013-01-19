@@ -43,14 +43,15 @@ To run the R script, load `src/scripts/copa.R` into [RStudio](http://rstudio.org
 
 Cascalog Build
 ==============
-See the leiningen build script in `project.clj` and the source in the `src/main/clj/copa` directory.
+See the Leiningen build script in `project.clj` and the Cascalog source in the `src/main/clj/copa` directory.
 
 To build and run:
 
     lein clean
     lein uberjar
     rm -rf output/ 
-    hadoop jar ./target/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv out/trap out/park out/tree out/road
+    hadoop jar ./target/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv data/gps.csv \
+      out/trap out/park out/tree out/road out/shade out/gps out/reco
 
 
 About Cascading
