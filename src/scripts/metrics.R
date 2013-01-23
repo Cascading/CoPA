@@ -24,8 +24,5 @@ hist(data$traffic_count)
 x <- log(data$traffic_count / 200) / 5
 boxplot(x)
 
-summary(as.factor(data$traffic_index))
-plot(summary(as.factor(data$traffic_index)))
-
 summary(as.factor(data$traffic_class))
 plot(summary(as.factor(data$traffic_class)))
