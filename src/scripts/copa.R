@@ -15,7 +15,7 @@ nrow(d)
 # CoPA GIS dataset does not list tree heights, but we can estimate the distribution
 d$avg_height <- (d$max_height + d$min_height) / 2
 m <- ggplot(d, aes(x=avg_height))
-m <- m + opts(title = "Estimated Tree Height (meters)")
+m <- m + ggtitle("Estimated Tree Height (meters)")
 m + geom_histogram(aes(y = ..density.., fill = ..count..)) + geom_density()
 
 # what are the N most popular trees?

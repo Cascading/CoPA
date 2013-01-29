@@ -22,15 +22,16 @@ To build the sample app from the command line use:
 
     gradle clean jar
 
-Before running this sample app, be sure to set your `HADOOP_HOME` environment variable. Then clear the `output` directory. To run on a desktop/laptop with Apache Hadoop in standalone mode:
+Before running this sample app, be sure to set your `HADOOP_HOME` environment variable. Then clear the `out` directory. To run on a desktop/laptop with Apache Hadoop in standalone mode:
 
-    rm -rf output
-    hadoop jar ./build/libs/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv data/gps.csv output/trap output/tsv output/tree output/road output/park output/shade output/reco
+    rm -rf out
+    hadoop jar ./build/libs/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv data/gps.csv \
+      out/trap out/tsv out/tree out/road out/park out/shade out/reco
 
 To view the results, for example the output recommendations in `reco`:
 
-    ls output
-    more output/reco/part-00000
+    ls out
+    more out/reco/part-00000
 
 An example of log captured from a successful build+run is at [https://gist.github.com/3660888](https://gist.github.com/3660888)
 
@@ -43,13 +44,13 @@ To run the R script, load `src/scripts/copa.R` into [RStudio](http://rstudio.org
 
 Cascalog Build
 ==============
-See the Leiningen build script in `project.clj` and the Cascalog source in the `src/main/clj/copa` directory.
+See the Leiningen build script in `project.clj` and Cascalog source in the `src/main/clj/copa` directory.
 
 To build and run:
 
     lein clean
     lein uberjar
-    rm -rf output/ 
+    rm -rf out/ 
     hadoop jar ./target/copa.jar data/copa.csv data/meta_tree.tsv data/meta_road.tsv data/gps.csv \
       out/trap out/park out/tree out/road out/shade out/gps out/reco
 
