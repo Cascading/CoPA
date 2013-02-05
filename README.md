@@ -47,6 +47,8 @@ Cascalog Build
 ==============
 See the Leiningen build script in `project.clj` and Cascalog source in the `src/main/clj/copa` directory.
 
+Note that this depends on Cascalog 1.9 or later, Leiningen 2.0 or later, JVM 1.6, and Apache Hadoop 1.x
+
 To build and run:
 
     lein clean
