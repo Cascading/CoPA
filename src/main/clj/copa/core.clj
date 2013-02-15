@@ -2,42 +2,31 @@
   (:use [cascalog.api]
         [cascalog.more-taps :only (hfs-delimited)]
         [clojure.contrib.generic.math-functions]
-        [date-clj]
-   )
+        [date-clj])
   (:require [clojure.string :as s]
             [cascalog [ops :as c] [vars :as v]]
             [clojure-csv.core :as csv]
-            [geohash.core :as geo]
-   )
+            [geohash.core :as geo])
   (:gen-class))
-
 
 (defn parse-gis [line]
   "leverages parse-csv to parse complex CSV format in the (unclean) GIS export"
-  (first (csv/parse-csv line))
- )
-
+  (first (csv/parse-csv line)))
 
 (defn etl-gis [gis trap]
   "subquery to parse data sets from the GIS source tap"
   (<- [?blurb ?misc ?geo ?kind]
       (gis ?line)
       (parse-gis ?line :> ?blurb ?misc ?geo ?kind)
-      (:trap (hfs-textline trap))
-   ))
-
+      (:trap (hfs-textline trap))))
 
 (defn avg [a b]
   "calculates the average of two decimals"
-  (/ (+ (read-string a) (read-string b)) 2.0)
- )
-
+  (/ (+ (read-string a) (read-string b)) 2.0))
 
 (defn geohash [lat lng]
   "calculates a geohash, at a common resolution"
-  (geo/encode lat lng 6)
-  )
-
+  (geo/encode lat lng 6))
 
 (defn parse-tree [misc]
   "parses the special fields in the tree format"
@@ -46,20 +35,14 @@
     misc)]
     (> (count x) 0)
     (> (count (first x)) 1)
-    (first x)
-    ;; backflips to trap data quality issues in the GIS export
-   ))
-
+    (first x))) ;; backflips to trap data quality issues in the GIS export
 
 (defn geo-tree [geo]
   "parses geolocation for tree format"
   (let [x (re-seq #"^(\S+),(\S+),(\S+)\s*$" geo)]
     (> (count x) 0)
     (> (count (first x)) 1)
-    (first x)
-    ;; backflips to trap data quality issues in the GIS export
-   ))
-
+    (first x))) ;; backflips to trap data quality issues in the GIS export
 
 (defn get-trees [src trap tree_meta]
   "subquery to parse/filter the tree data"
@@ -77,9 +60,7 @@
       (read-string ?tree_lat :> ?lat)
       (read-string ?tree_lng :> ?lng)
       (geohash ?lat ?lng :> ?geohash)
-      (:trap (hfs-textline trap))
-   ))
-
+      (:trap (hfs-textline trap))))
 
 (defn parse-road [misc]
   "parses the special fields in the road format"
@@ -88,26 +69,19 @@
             misc)]
     (> (count x) 0)
     (> (count (first x)) 1)
-    (first x)
-    ;; backflips to trap data quality issues in the GIS export
-   ))
-
+    (first x))) ;; backflips to trap data quality issues in the GIS export
 
 (defn estimate-albedo [overlay_year albedo_new albedo_worn]
   "calculates an estimator for road albedo, based on road surface age"
   (cond
     (>= (read-string overlay_year) (- (year (today)) 10.0))
-      (read-string albedo_new)
+    (read-string albedo_new)
     :else
-      (read-string albedo_worn)
-   ))
-
+    (read-string albedo_worn)))
 
 (defmapcatop bigram [s]
   "generator for bi-grams, from a space-separated list"
-  (partition 2 1 (s/split s #"\s"))
- )
-
+  (partition 2 1 (s/split s #"\s")))
 
 (defn midpoint [pt0 pt1]
   "calculates the midpoint of two geolocation coordinates"
@@ -118,19 +92,15 @@
         alt0 (read-string (nth l0 2))
         lat1 (read-string (nth l1 1))
         lng1 (read-string (nth l1 0))
-        alt1 (read-string (nth l1 2))
-        ]
-    [ (/ (+ lat0 lat1) 2.0) (/ (+ lng0 lng1) 2.0) (/ (+ alt0 alt1) 2.0) ]
-   ))
-
+        alt1 (read-string (nth l1 2)) ]
+    [ (/ (+ lat0 lat1) 2.0) (/ (+ lng0 lng1) 2.0) (/ (+ alt0 alt1) 2.0) ]))
 
 (defn get-roads [src trap road_meta]
   "subquery to parse/filter the road data"
   (<- [?blurb ?bike_lane ?bus_route ?truck_route ?albedo
        ?min_lat ?min_lng ?min_alt ?geohash
        ?traffic_count ?traffic_index ?traffic_class
-       ?paving_length ?paving_width ?paving_area ?surface_type
-       ]
+       ?paving_length ?paving_width ?paving_area ?surface_type ]
       (src ?blurb ?misc ?geo ?kind)
       (re-matches #"^\s+Sequence.*Traffic Count.*" ?misc)
       (parse-road ?misc :> _
@@ -146,26 +116,19 @@
       (c/min ?lng :> ?min_lng)
       (c/min ?alt :> ?min_alt)
       (geohash ?min_lat ?min_lng :> ?geohash)
-      (:trap (hfs-textline trap))
-   ))
-
+      (:trap (hfs-textline trap))))
 
 (defn get-parks [src trap]
   "subquery to parse/filter the park data"
   (<- [?blurb ?misc ?geo ?kind]
       (src ?blurb ?misc ?geo ?kind)
-      (re-matches #"\s+Community Type\:\s+Park.*" ?misc)
-   ))
-
+      (re-matches #"\s+Community Type\:\s+Park.*" ?misc)))
 
 (defn tree-distance [tree_lat tree_lng road_lat road_lng]
   "calculates distance from a tree to the midpoint of a road segment; TODO IMPROVE GEO MODEL"
   (let [y (- (read-string tree_lat) (read-string road_lat))
-        x (- (read-string tree_lng) (read-string road_lng))
-        ]
-    (sqrt (+ (pow y 2.0) (pow x 2.0)))
-   ))
-
+        x (- (read-string tree_lng) (read-string road_lng)) ]
+    (sqrt (+ (pow y 2.0) (pow x 2.0)))))
 
 (defn road-metric [traffic_class traffic_count albedo]
   "calculates a metric for comparing road segments, approximating a decision tree; TODO USE PMML"
@@ -175,11 +138,9 @@
       :else 0.0)
     ;; scale traffic_count based on distribution mean
     (/ (log (/ (read-string traffic_count) 200.0)) 5.0)
-    (- 1.0 (read-string albedo))
-    ]]
+    (- 1.0 (read-string albedo))]])
     ;; in practice, we'd probably train a predictive model using decision trees, 
     ;; regression, etc., plus incorporate customer feedback, QA of the data, etc.
-  )
 
 
 (defn get-shade [trees roads]
@@ -197,18 +158,14 @@
       (/ ?height ?distance :> ?tree_moment)
       (c/sum ?tree_moment :> ?sum_tree_moment)
       ;; magic number 200000.0 used to scale tree moment, based on median
-      (/ ?sum_tree_moment 200000.0 :> ?tree_metric)
-   ))
-
+      (/ ?sum_tree_moment 200000.0 :> ?tree_metric)))
 
 (defn date-num [date]
   "converts an RFC 3339 timestamp to a monotonically increasing number"
   (apply
    (fn [yr mon day hr min sec]
        (+ (* (+ (* (+ (* (+ (* (+ (* yr 366) mon) 31) day) 24) hr) 60) min) 60) sec))
-   (map #(Integer/parseInt %) (re-seq #"\d+" date))
-   ))
-
+   (map #(Integer/parseInt %) (re-seq #"\d+" date))))
 
 (defn get-gps [gps_logs trap]
   "subquery to aggregate and rank GPS tracks per user"
@@ -219,56 +176,34 @@
       (geohash ?lat ?lng :> ?geohash)
       (c/count :> ?gps_count)
       (date-num ?date :> ?visit)
-      (c/max ?visit :> ?recent_visit)
- ))
-
+      (c/max ?visit :> ?recent_visit)))
 
 (defn get-reco [tracks shades]
   "subquery to recommend road segments based on GPS tracks"
   (<- [?uuid ?road ?geohash ?lat ?lng ?alt ?gps_count ?recent_visit ?road_metric ?tree_metric]
       (tracks ?uuid ?geohash ?gps_count ?recent_visit)
-      (shades ?road ?geohash ?lat ?lng ?alt ?road_metric ?tree_metric)
-   ))
-
+      (shades ?road ?geohash ?lat ?lng ?alt ?road_metric ?tree_metric)))
 
 (defn -main
   [in meta_tree meta_road logs trap park tree road shade gps reco & args]
-
   (let [gis (hfs-delimited in)
         tree_meta (hfs-delimited meta_tree :skip-header? true)
         road_meta (hfs-delimited meta_road :skip-header? true)
         gps_logs (hfs-delimited logs :delimiter "," :skip-header? true)
-        src (etl-gis gis (s/join "/" [trap "gis"]))
-        ]
-
+        src (etl-gis gis (s/join "/" [trap "gis"]))]
     (?- (hfs-delimited tree)
-        (get-trees src (s/join "/" [trap "tree"]) tree_meta)
-     )
-
+        (get-trees src (s/join "/" [trap "tree"]) tree_meta))
     (?- (hfs-delimited road)
-        (get-roads src (s/join "/" [trap "road"]) road_meta)
-     )
-
+        (get-roads src (s/join "/" [trap "road"]) road_meta))
     (?- (hfs-delimited park)
-        (get-parks src (s/join "/" [trap "park"]))
-     )
-
+        (get-parks src (s/join "/" [trap "park"])))
     (?- (hfs-delimited shade)
         (let [trees (hfs-delimited tree)
-              roads (hfs-delimited road)
-              ]
-          (get-shade trees roads)
-         ))
-
+              roads (hfs-delimited road) ]
+          (get-shade trees roads)))
     (?- (hfs-delimited gps)
-        (get-gps gps_logs (s/join "/" [trap "logs"]))
-     )
-
+        (get-gps gps_logs (s/join "/" [trap "logs"])))
     (?- (hfs-delimited reco)
         (let [tracks (hfs-delimited gps)
-              shades (hfs-delimited shade)
-              ]
-          (get-reco tracks shades)
-         ))
-
-   ))
+              shades (hfs-delimited shade) ]
+          (get-reco tracks shades)))))
