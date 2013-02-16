@@ -24,9 +24,7 @@
   "calculates the average of given numbers"
   (div (apply + more) (count more)))
 
-(defn geohash [lat lng]
-  "calculates a geohash, at a common resolution"
-  (geo/encode lat lng 6))
+(def geo-precision "a common resolution" 6)
 
 (defn re-seq-chunks [pattern s]
   (rest (first (re-seq pattern s))))
@@ -54,7 +52,7 @@
       (avg ?min_height ?max_height :> ?avg_height)
       (geo-tree ?geo :> ?tree_lat ?tree_lng ?tree_alt)
       ((c/each read-string) ?tree_lat ?tree_lng :> ?lat ?lng)
-      (geohash ?lat ?lng :> ?geohash)
+      (geo/encode ?lat ?lng geo-precision :> ?geohash)
       (:trap (hfs-textline trap))))
 
 (def parse-road
@@ -104,7 +102,7 @@
       (midpoint ?pt0 ?pt1 :> ?lat ?lng ?alt)
       ;; why filter for min? because there are geo duplicates..
       ((c/each c/min) ?lat ?lng ?alt :> ?road_lat ?road_lng ?road_alt)
-      (geohash ?road_lat ?road_lng :> ?geohash)
+      (geo/encode ?road_lat ?road_lng geo-precision :> ?geohash)
       (:trap (hfs-textline trap))))
 
 (defn get-parks [src trap]
@@ -164,7 +162,7 @@
   "subquery to aggregate and rank GPS tracks per user"
   (<- gps-fields
       (gps_logs ?date ?uuid ?lat ?lng ?alt ?speed ?heading ?elapsed ?distance)
-      (geohash ?lat ?lng :> ?geohash)
+      (geo/encode ?lat ?lng geo-precision :> ?geohash)
       (c/count :> ?gps_count)
       (date-num ?date :> ?visit)
       (c/max ?visit :> ?recent_visit)))
