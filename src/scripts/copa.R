@@ -4,7 +4,7 @@
 library(ggplot2)
 
 # point this to your Hadoop "output" directory
-dat_folder <- "~/src/concur/CoPA/output"
+dat_folder <- "out"  # if pwd is root of project
 
 # examine the "tree" results
 d <- read.table(file=paste(dat_folder, "tree/part-00000", sep="/"), sep="\t", quote="", na.strings="NULL", header=TRUE, encoding="UTF8")
